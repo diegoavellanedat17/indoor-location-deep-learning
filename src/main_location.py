@@ -6,13 +6,33 @@ import paho.mqtt.client as mqtt
 import re
 import json
 from datetime import datetime, timedelta
-from mqtt_connection import * 
+from mqtt_connection import *
+import os
+import sys, getopt
+import signal
+import time
+from edge_impulse_linux.runner import ImpulseRunner
+import io
 
 window_size = 10 
 rssi_queue = collections.deque(window_size*[0], maxlen=window_size)
 rssi_data = list(rssi_queue)
 moving_average_window = 3
+runner = None
+model = '4classesModel.eim'
+dir_path = os.path.dirname(os.path.realpath(__file__))
+modelfile = os.path.join(dir_path, model)
 
+def signal_handler(sig, frame):
+    print('Interrupted')
+    if (runner):
+        runner.stop()
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, signal_handler)
+
+def help():
+    print('python classify.py <path_to_model.eim> <path_to_features.txt>')
 
 def on_connect(client, userdata, flags, rc):
     # This will be called once the client connects
@@ -116,7 +136,10 @@ def process_info(item_payload_array):
 
         tag2_fil = np.column_stack((s1_t2_fil,s2_t2_fil,s3_t2_fil,s4_t2_fil,s5_t2_fil))
         tag2_fil = tag2_fil.flatten()
+        res = runner.classify(tag2_fil)
         print(tag2_fil)
+        print("classification:")
+        print(res["result"])
 
 
 # for item in range(15):
@@ -125,8 +148,10 @@ def process_info(item_payload_array):
 #     item_data = [[-100,-100,-100,-100,-100],[-3,rand+1,rand+2,rand+3,rand+4],[-100,-100,-100,-100,-100]]
 #     process_info(item_data)
 #rssi_array = np.array(rssi_queue)
-
-# Crear vector
+print('MODEL: ' + modelfile)
+runner = ImpulseRunner(modelfile)
+model_info = runner.init()
+print('Loaded runner for "' + model_info['project']['owner'] + ' / ' + model_info['project']['name'] + '"')
 rssi_vector = [ [0, 0, 0, 0,0], [0, 0, 0, 0, 0], [ 0, 0, 0, 0,0]]
 client = mqtt.Client("mqtt-location-script") # client ID "mqtt-test"
 client.on_connect = on_connect
